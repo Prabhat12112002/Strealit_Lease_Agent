@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lease Assistant - AI Oil & Gas Lease Intelligence</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Header -->
+    <header class="app-header">
+      <div class="header-brand">
+        <div class="logo-container">
+          <!-- Oil Rig SVG with AI pulse rings -->
+          <svg class="logo-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 2L2 22h20L12 2z" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M12 2v20" stroke-linecap="round"/>
+            <path d="M7 12h10" stroke-linecap="round"/>
+            <path d="M9 8h6" stroke-linecap="round"/>
+            <path d="M5 16h14" stroke-linecap="round"/>
+            <circle cx="12" cy="6" r="1.5" fill="currentColor"/>
+          </svg>
+          <span class="pulse-ring"></span>
+        </div>
+        <div class="brand-text">
+          <h1>Lease Assistant</h1>
+          <span class="tagline">AI Oil & Gas Lease Intelligence</span>
+        </div>
+      </div>
+      <div class="header-actions">
+        <div class="status-indicator">
+          <span class="status-dot"></span>
+          <span class="status-text">KB: Indexed</span>
+        </div>
+        <button id="theme-toggle" class="icon-btn" title="Toggle Theme" aria-label="Toggle Theme">
+          <svg class="sun-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="5"/>
+            <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
+          </svg>
+          <svg class="moon-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display: none;">
+            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <div class="main-layout">
+      <!-- Sidebar -->
+      <aside class="app-sidebar">
+        <!-- Section: Active Sessions -->
+        <div class="sidebar-section">
+          <div class="section-header">
+            <h3>💬 Conversations</h3>
+            <button id="new-chat-btn" class="action-btn-sm">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 5v14M5 12h14"/>
+              </svg>
+              <span>New</span>
+            </button>
+          </div>
+          <div class="session-list" id="session-list">
+            <div class="session-item active">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="session-icon">
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+              </svg>
+              <div class="session-info">
+                <span class="session-title">Royalty & Pooling Analysis</span>
+                <span class="session-time">Active now</span>
+              </div>
+            </div>
+            <div class="session-item">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="session-icon">
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+              </svg>
+              <div class="session-info">
+                <span class="session-title">Lease 6 Primary Term Summary</span>
+                <span class="session-time">2 hours ago</span>
+              </div>
+            </div>
+            <div class="session-item">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="session-icon">
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+              </svg>
+              <div class="session-info">
+                <span class="session-title">Pooling vs Unitization Clauses</span>
+                <span class="session-time">Yesterday</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Section: Indexed Documents -->
+        <div class="sidebar-section">
+          <div class="section-header">
+            <h3>📑 Knowledge Base</h3>
+          </div>
+          <div class="doc-list">
+            <div class="doc-item">
+              <svg class="doc-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                <polyline points="14 2 14 8 20 8"/>
+              </svg>
+              <div class="doc-info">
+                <span class="doc-name">Lease 2.pdf</span>
+                <span class="doc-meta">24 Pages • 3/16 Royalty</span>
+              </div>
+            </div>
+            <div class="doc-item">
+              <svg class="doc-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                <polyline points="14 2 14 8 20 8"/>
+              </svg>
+              <div class="doc-info">
+                <span class="doc-name">Lease 3.pdf</span>
+                <span class="doc-meta">18 Pages • 1/8 Royalty</span>
+              </div>
+            </div>
+            <div class="doc-item">
+              <svg class="doc-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                <polyline points="14 2 14 8 20 8"/>
+              </svg>
+              <div class="doc-info">
+                <span class="doc-name">Lease 4.pdf</span>
+                <span class="doc-meta">32 Pages • 1/5 Royalty</span>
+              </div>
+            </div>
+            <div class="doc-item">
+              <svg class="doc-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                <polyline points="14 2 14 8 20 8"/>
+              </svg>
+              <div class="doc-info">
+                <span class="doc-name">Lease 5.pdf</span>
+                <span class="doc-meta">15 Pages • 3/16 Royalty</span>
+              </div>
+            </div>
+            <div class="doc-item">
+              <svg class="doc-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                <polyline points="14 2 14 8 20 8"/>
+              </svg>
+              <div class="doc-info">
+                <span class="doc-name">Lease 6.pdf</span>
+                <span class="doc-meta">28 Pages • 1/4 Royalty</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Section: Metrics & Performance -->
+        <div class="sidebar-section metrics-section">
+          <div class="section-header">
+            <h3>📊 Platform Metrics</h3>
+          </div>
+          <div class="metrics-grid">
+            <div class="metric-card">
+              <span class="metric-value">80%</span>
+              <span class="metric-label">Review Time Saved</span>
+            </div>
+            <div class="metric-card">
+              <span class="metric-value">5+</span>
+              <span class="metric-label">Complex Leases</span>
+            </div>
+            <div class="metric-card">
+              <span class="metric-value">117</span>
+              <span class="metric-label">Total Pages</span>
+            </div>
+            <div class="metric-card">
+              <span class="metric-value">1,248</span>
+              <span class="metric-label">Vector Chunks</span>
+            </div>
+            <div class="metric-card full-width">
+              <div class="speed-indicator">
+                <span class="metric-value">&lt; 1.8s</span>
+                <span class="status-badge">Fast</span>
+              </div>
+              <span class="metric-label">Avg. LLM Response Latency</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Sidebar Footer -->
+        <div class="sidebar-footer">
+          <span class="engine-badge">Groq / Llama-3.3-70B</span>
+          <span class="engine-badge">Rerank: BM25</span>
+        </div>
+      </aside>
+
+      <!-- Chat Container -->
+      <main class="chat-container">
+        <!-- Message History Wrapper -->
+        <div class="chat-messages" id="chat-messages">
+          <!-- Conversation turns will be dynamically rendered here -->
+        </div>
+
+        <!-- Input Area Wrapper -->
+        <div class="chat-input-area">
+          <div class="suggestions-container" id="suggestions-container">
+            <button class="suggestion-tag">What is the royalty percentage in Lease 6?</button>
+            <button class="suggestion-tag">Explain the Pooling Clause in Lease 4</button>
+            <button class="suggestion-tag">Find the primary term of Lease 3</button>
+            <button class="suggestion-tag">Is there a shut-in royalty clause in Lease 2?</button>
+          </div>
+
+          <form class="input-form" id="chat-form">
+            <input 
+              type="text" 
+              id="message-input" 
+              placeholder="Query leases (e.g., 'Does Lease 5 require notice for assignment?')..." 
+              autocomplete="off" 
+              required
+            >
+            
+            <!-- Filters Toggle Component -->
+            <div class="filters-dropdown-wrapper">
+              <button type="button" id="filter-btn" class="input-action-btn" title="Add Filters">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>
+                </svg>
+                <span class="filter-count" id="filter-count">0</span>
+              </button>
+              
+              <!-- Filter Dropdown Panel -->
+              <div class="filter-panel" id="filter-panel">
+                <div class="filter-panel-header">
+                  <h4>Search Metadata Filters</h4>
+                  <button type="button" id="reset-filters" class="text-btn">Reset</button>
+                </div>
+                <div class="filter-row">
+                  <label for="filter-lease">Lease No:</label>
+                  <select id="filter-lease">
+                    <option value="">Any Lease</option>
+                    <option value="2">Lease 2</option>
+                    <option value="3">Lease 3</option>
+                    <option value="4">Lease 4</option>
+                    <option value="5">Lease 5</option>
+                    <option value="6">Lease 6</option>
+                  </select>
+                </div>
+                <div class="filter-row">
+                  <label for="filter-page">Specific Page:</label>
+                  <input type="number" id="filter-page" min="1" placeholder="Page #">
+                </div>
+                <div class="filter-row double">
+                  <div>
+                    <label for="filter-page-min">Min Page:</label>
+                    <input type="number" id="filter-page-min" min="1" placeholder="Min">
+                  </div>
+                  <div>
+                    <label for="filter-page-max">Max Page:</label>
+                    <input type="number" id="filter-page-max" min="1" placeholder="Max">
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <button type="submit" id="send-btn" class="send-button" aria-label="Send Query">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="22" y1="2" x2="11" y2="13"/>
+                <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+              </svg>
+            </button>
+          </form>
+          <div class="input-footer">
+            <span>RAG agent includes Hybrid Retrieval (FAISS vector similarity + BM25 keyword matching)</span>
+          </div>
+        </div>
+      </main>
+
+      <!-- Source Detail Slider Panel -->
+      <div class="source-panel" id="source-panel">
+        <div class="source-panel-header">
+          <h3>Citation Reference Details</h3>
+          <button id="close-source-btn" class="icon-btn" aria-label="Close Reference Panel">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="6" x2="6" y2="18"/>
+              <line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
+        <div class="source-panel-body" id="source-panel-body">
+          <div class="placeholder-content">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="placeholder-icon">
+              <circle cx="12" cy="12" r="10"/>
+              <line x1="12" y1="16" x2="12" y2="12"/>
+              <line x1="12" y1="8" x2="12.01" y2="8"/>
+            </svg>
+            <p>Select any citation tag inside an AI answer bubble to inspect the raw document text block retrieved from the FAISS/BM25 database.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
