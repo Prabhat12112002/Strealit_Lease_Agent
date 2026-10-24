@@ -6,6 +6,7 @@
 
 ## 1. Project Overview
 - **Name:** Oil & Gas Lease Assistant (Streamlit Project)
+- **Repository:** `https://github.com/Prabhat12112002/Strealit_Lease_Agent.git` (branch: `main`)
 - **Core Functionality:** RAG-powered AI assistant that ingests oil & gas lease agreements (PDFs), enables hybrid search (FAISS + BM25), reranking, and natural language question-answering with citation and filtering.
 - **Interfaces:**
   - **Streamlit App:** `streamlit_app.py` (primary interactive UI with `st.chat_input` & cited sources)
@@ -50,6 +51,7 @@ Stremlit_Project/
 - **RAG & Hybrid Search:** RRF keying uses content/metadata hashes (resolved `id()` object identity bug). Page numbers are unified to 1-based indexing across ingestion, index, and retrieval filters.
 - **LangGraph Routing:** Separates document QA / document summarization (`qa`) from session history recaps (`summarize`), ensuring lease documents are always retrieved for lease queries.
 - **FastAPI Backend:** Supports `/api/chat` with SSE token streaming, safe lazy LLM loading, and metadata citations.
+- **Deployment & Sync:** Changes are synced directly to remote repository `origin/main`.
 
 ---
 
@@ -74,3 +76,5 @@ Stremlit_Project/
   - Fixed Streamlit filter bug where default number input values forced `page=1` filter on all queries.
   - Fixed LangGraph router routing document summaries to conversation history node without retrieving lease text.
   - Upgraded Streamlit UI with `st.chat_input`, citation source drawers, and sidebar Groq API key configuration.
+- **2026-10-24 (Session 3):**
+  - Pushed all fixes, configuration updates, and `brain.md` to GitHub remote `origin/main` (`https://github.com/Prabhat12112002/Strealit_Lease_Agent.git`).
