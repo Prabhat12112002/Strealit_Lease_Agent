@@ -24,13 +24,17 @@ app.add_middleware(
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
-)
+    )
 
-
-# Global variables initialized on demand
+# Global resources initialized safely
 embeddings = init_embeddings()
 store = load_store(embeddings)
-llm = init_llm()
+
+def get_active_llm():
+    try:
+        return init_llm()
+    except Exception as e:
+        return None
 
 class ChatRequest(BaseModel):
     message: str
@@ -39,23 +43,31 @@ class ChatRequest(BaseModel):
 
 @app.post("/api/chat")
 async def chat_endpoint(req: ChatRequest):
+    global store
     if store is None:
-        raise HTTPException(status_code=500, detail="FAISS vector store is not initialized.")
+        store = load_store(embeddings)
+    if store is None:
+        raise HTTPException(status_code=500, detail="FAISS vector store is not initialized. Please ingest PDFs first.")
+
+    llm = get_active_llm()
+    if llm is None:
+        raise HTTPException(
+            status_code=500, 
+            detail="Groq LLM is not initialized. Please ensure GROQ_API_KEY is configured in your environment or .env file."
+        )
 
     # 1. Fetch retrieval function
-    # Reranking defaults to what's defined in .env
     rerank_method = os.getenv("RERANK_METHOD", "bm25")
     get_context = make_retrieval_fn(store, rerank_method=rerank_method)
 
-    # 2. Retrieve document chunks with filters
+    # 2. Retrieve document chunks with filters (support camelCase & snake_case)
+    f = req.filters or {}
     filters_dict = {
-        "lease_no": req.filters.get("leaseNo") if req.filters and req.filters.get("leaseNo") else None,
-        "page": req.filters.get("page") if req.filters and req.filters.get("page") else None,
-        "page_min": req.filters.get("pageMin") if req.filters and req.filters.get("pageMin") else None,
-        "page_max": req.filters.get("pageMax") if req.filters and req.filters.get("pageMax") else None,
+        "lease_no": f.get("leaseNo") if f.get("leaseNo") is not None else f.get("lease_no"),
+        "page": f.get("page"),
+        "page_min": f.get("pageMin") if f.get("pageMin") is not None else f.get("page_min"),
+        "page_max": f.get("pageMax") if f.get("pageMax") is not None else f.get("page_max"),
     }
-
-    # Remove None values
     filters_dict = {k: v for k, v in filters_dict.items() if v is not None}
     if not filters_dict:
         filters_dict = None
@@ -65,14 +77,12 @@ async def chat_endpoint(req: ChatRequest):
     # 3. Formulate history prompt
     recent_history = ""
     if req.history:
-        recent_history = "\n".join([f"{h['role']}: {h['content']}" for h in req.history[-6:]])
+        recent_history = "\n".join([f"{h.get('role', 'user')}: {h.get('content', '')}" for h in req.history[-6:]])
 
     # 4. Prepare stream generator
     async def event_generator():
-        # System instructions
-        system_note_str = note if note else "No special filtering errors."
+        system_note_str = note if note else "None"
         
-        # Prepare prompts
         prompt_template = ChatPromptTemplate.from_messages([
             ("system", SYSTEM_QA),
             ("human", 
@@ -82,7 +92,6 @@ async def chat_endpoint(req: ChatRequest):
              "User question:\n{question}")
         ])
         
-        # Call OpenRouter streaming
         messages = prompt_template.format_messages(
             system_note=system_note_str,
             recent_history=recent_history or "(no prior history)",
@@ -90,15 +99,13 @@ async def chat_endpoint(req: ChatRequest):
             question=req.message
         )
         
-        # Stream from DeepSeek model
         answer_text = ""
         try:
-            # We wrap the generator to yield items
             for chunk in llm.stream(messages):
-                token = chunk.content
+                token = chunk.content if hasattr(chunk, "content") else str(chunk)
                 answer_text += token
                 yield f"data: {json.dumps({'token': token})}\n\n"
-                await asyncio.sleep(0.01) # Yield to event loop
+                await asyncio.sleep(0.005)
         except Exception as e:
             yield f"data: {json.dumps({'error': str(e)})}\n\n"
             return
@@ -112,11 +119,10 @@ async def chat_endpoint(req: ChatRequest):
         
         try:
             summary_res = await summary_chain.ainvoke({"answer": answer_text})
-            summary_text = summary_res.content.strip()
+            summary_text = summary_res.content.strip() if hasattr(summary_res, "content") else str(summary_res).strip()
         except Exception:
-            summary_text = "Analysis completed for referenced terms."
+            summary_text = "Analysis completed for referenced lease terms."
 
-        # Convert documents references list
         citations_list = []
         for d in docs:
             m = d.metadata or {}
@@ -125,9 +131,8 @@ async def chat_endpoint(req: ChatRequest):
                 "page": m.get("page", 1),
                 "text": d.page_content,
                 "score": 0.95
-              })
+            })
 
-        # Yield metadata packet containing final values
         final_meta = {
             "summary": summary_text,
             "citations": citations_list

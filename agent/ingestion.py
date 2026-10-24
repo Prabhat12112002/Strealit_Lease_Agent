@@ -40,10 +40,12 @@ def load_pdf_docs(folder: str) -> List[Document]:
             for d in file_docs:
                 src_path = os.path.join(folder, file)
                 meta = d.metadata or {}
+                raw_page = meta.get("page", meta.get("page_number", None))
+                page_num = (int(raw_page) + 1) if raw_page is not None else 1
                 meta.update({
                     "source_path": src_path,
                     "file_name": file,
-                    "page": meta.get("page", meta.get("page_number", None)),
+                    "page": page_num,
                     "lease_no": lease_no,
                 })
                 docs.append(Document(page_content=d.page_content, metadata=meta))
@@ -60,10 +62,12 @@ def load_pdfs_from_filepaths(file_paths: List[str]) -> List[Document]:
         lease_no = extract_lease_no(file)
         for d in file_docs:
             meta = d.metadata or {}
+            raw_page = meta.get("page", meta.get("page_number", None))
+            page_num = (int(raw_page) + 1) if raw_page is not None else 1
             meta.update({
                 "source_path": path,
                 "file_name": file,
-                "page": meta.get("page", meta.get("page_number", None)),
+                "page": page_num,
                 "lease_no": lease_no,
             })
             docs.append(Document(page_content=d.page_content, metadata=meta))
