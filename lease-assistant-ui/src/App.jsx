@@ -223,7 +223,9 @@ function App() {
 
     try {
       // 2. Perform Fetch call to FastAPI API server
-      const response = await fetch("http://127.0.0.1:8000/api/chat", {
+      const apiBase = import.meta.env.VITE_API_URL || (typeof window !== "undefined" && window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1" ? "/api" : "http://127.0.0.1:8000");
+      const endpoint = apiBase.endsWith("/api/chat") ? apiBase : `${apiBase}/api/chat`;
+      const response = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

@@ -20,7 +20,7 @@
 |---|---|---|
 | **LLM** | Groq API (`ChatGroq`) | `llama-3.1-8b-instant` (high speed, accurate extraction) |
 | **Embeddings** | HuggingFace | `all-MiniLM-L6-v2` (runs locally, CPU) |
-| **Vector Database** | FAISS | Persisted in `faiss_index/` (1-based page metadata) |
+| **Vector Database** | FAISS | Persisted in `faiss_index/` (tracked in git for fast live cold starts) |
 | **Search & RAG** | LangChain, LangGraph | Hybrid retrieval (FAISS + BM25 RRF) + BGE/BM25 reranker |
 | **Backend / App** | Python 3.10+, FastAPI, Streamlit | `streamlit_app.py`, `api.py` |
 | **Frontend** | Streamlit / React (Vite) | Multi-session chat, PDF upload, metadata filters, citation cards |
@@ -34,13 +34,13 @@ Stremlit_Project/
 │   ├── ingestion.py       # PDF parsing (1-based page indexing), chunking, FAISS index creation
 │   └── retrieve_ag.py     # ChatGroq init, hybrid RRF retrieval, LangGraph agent, persistence
 ├── docs/                  # Source PDF lease agreements (Lease 2-6)
-├── faiss_index/           # Persisted FAISS vector index files (1-based pages)
+├── faiss_index/           # Persisted FAISS vector index files (1-based pages, committed)
 ├── lease-assistant-ui/    # React/Vite frontend client
 ├── ui/                    # Standalone HTML/JS/CSS client & integration guide
 ├── api.py                 # FastAPI backend exposing /api/chat with SSE streaming
 ├── streamlit_app.py       # Streamlit web application with modern chat interface
 ├── requirements.txt       # Python dependencies (includes langchain-groq)
-├── vercel.json            # Deployment configuration
+├── vercel.json            # Deployment configuration for React UI
 └── brain.md               # Context and memory ledger (this file)
 ```
 
@@ -49,9 +49,8 @@ Stremlit_Project/
 ## 4. Current Status & Known Decisions
 - **LLM Engine:** Groq `llama-3.1-8b-instant` with temperature `0.1` for grounded, hallucination-resistant answers. Supported via `.env` (`GROQ_API_KEY`) or direct entry in Streamlit UI sidebar.
 - **RAG & Hybrid Search:** RRF keying uses content/metadata hashes (resolved `id()` object identity bug). Page numbers are unified to 1-based indexing across ingestion, index, and retrieval filters.
-- **LangGraph Routing:** Separates document QA / document summarization (`qa`) from session history recaps (`summarize`), ensuring lease documents are always retrieved for lease queries.
-- **FastAPI Backend:** Supports `/api/chat` with SSE token streaming, safe lazy LLM loading, and metadata citations.
-- **Deployment & Sync:** Changes are synced directly to remote repository `origin/main`.
+- **Pre-Built Vector Store:** `faiss_index/` is tracked in git so live cloud deployments (e.g. Streamlit Cloud) start up instantly without re-processing PDFs on cold start.
+- **FastAPI Backend & React UI:** Frontend supports dynamic API URLs (`VITE_API_URL`) with fallback to local proxy.
 
 ---
 
@@ -78,3 +77,7 @@ Stremlit_Project/
   - Upgraded Streamlit UI with `st.chat_input`, citation source drawers, and sidebar Groq API key configuration.
 - **2026-10-24 (Session 3):**
   - Pushed all fixes, configuration updates, and `brain.md` to GitHub remote `origin/main` (`https://github.com/Prabhat12112002/Strealit_Lease_Agent.git`).
+- **2026-10-24 (Session 4):**
+  - Tracked pre-indexed `faiss_index/` in git for instant startup on live cloud deployments.
+  - Updated React UI (`lease-assistant-ui`) to support dynamic `VITE_API_URL` configuration and verified clean production build.
+  - Committed and pushed updates to `origin/main` for live website deployment.

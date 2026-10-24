@@ -24,7 +24,6 @@ pip-delete-this-directory.txt
 .env.production.local
 
 # Project specific caches and indexes
-faiss_index/
 .system_generated/
 *.log
 
