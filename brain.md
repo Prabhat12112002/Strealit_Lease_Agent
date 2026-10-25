@@ -7,23 +7,24 @@
 ## 1. Project Overview
 - **Name:** Oil & Gas Lease Assistant (Streamlit Project)
 - **Repository:** `https://github.com/Prabhat12112002/Strealit_Lease_Agent.git` (branch: `main`)
+- **Live Vercel Site:** `https://strealit-lease-agent.vercel.app/`
 - **Core Functionality:** RAG-powered AI assistant that ingests oil & gas lease agreements (PDFs), enables hybrid search (FAISS + BM25), reranking, and natural language question-answering with citation and filtering.
 - **Interfaces:**
-  - **Streamlit App:** `streamlit_app.py` (primary interactive UI with `st.chat_input` & cited sources)
-  - **FastAPI Backend:** `api.py` (REST/SSE streaming endpoints `/api/chat` for external frontends)
-  - **Web UIs:** `lease-assistant-ui/` (React + Vite) & `ui/` (Vanilla HTML/JS)
+  - **Live Web App (Vercel):** `lease-assistant-ui/` (React + Vite) with direct in-browser Groq RAG streaming over 218 pre-indexed lease chunks.
+  - **Streamlit App:** `streamlit_app.py` (Python desktop/cloud UI with `st.chat_input` & cited sources).
+  - **FastAPI Backend:** `api.py` (REST/SSE streaming endpoints `/api/chat` for optional local/decoupled deployment).
 
 ---
 
 ## 2. Tech Stack & Key Services
 | Layer | Technology | Details |
 |---|---|---|
-| **LLM** | Groq API (`ChatGroq`) | `llama-3.1-8b-instant` (high speed, accurate extraction) |
+| **LLM** | Groq API (`ChatGroq` / Groq REST) | `llama-3.1-8b-instant` (ultra-fast, hallucination-resistant) |
 | **Embeddings** | HuggingFace | `all-MiniLM-L6-v2` (runs locally, CPU) |
-| **Vector Database** | FAISS | Persisted in `faiss_index/` (tracked in git for fast live cold starts) |
-| **Search & RAG** | LangChain, LangGraph | Hybrid retrieval (FAISS + BM25 RRF) + BGE/BM25 reranker |
+| **Vector Database** | FAISS | Persisted in `faiss_index/` (1-based page metadata, committed to git) |
+| **Search & RAG** | Pure LangChain | Streamlined LangChain RAG pipeline (no LangGraph overhead) |
 | **Backend / App** | Python 3.10+, FastAPI, Streamlit | `streamlit_app.py`, `api.py` |
-| **Frontend** | Streamlit / React (Vite) | Multi-session chat, PDF upload, metadata filters, citation cards |
+| **Frontend / Web** | React (Vite) on Vercel | Real-time token streaming, citation badges, key config modal |
 
 ---
 
@@ -32,25 +33,25 @@
 Stremlit_Project/
 ├── agent/
 │   ├── ingestion.py       # PDF parsing (1-based page indexing), chunking, FAISS index creation
-│   └── retrieve_ag.py     # ChatGroq init, hybrid RRF retrieval, LangGraph agent, persistence
-├── docs/                  # Source PDF lease agreements (Lease 2-6)
+│   └── retrieve_ag.py     # Pure LangChain RAG pipeline (ChatGroq, FAISS + BM25 hybrid search)
+├── docs/                  # Source PDF lease agreements (Lease 2-6) + lease_chunks.json
 ├── faiss_index/           # Persisted FAISS vector index files (1-based pages, committed)
-├── lease-assistant-ui/    # React/Vite frontend client
-├── ui/                    # Standalone HTML/JS/CSS client & integration guide
+├── lease-assistant-ui/    # React/Vite frontend client with client-side Groq RAG engine
 ├── api.py                 # FastAPI backend exposing /api/chat with SSE streaming
 ├── streamlit_app.py       # Streamlit web application with modern chat interface
 ├── requirements.txt       # Python dependencies (includes langchain-groq)
-├── vercel.json            # Deployment configuration for React UI
+├── vercel.json            # Deployment configuration for Vercel
+├── package.json           # Root build orchestration for Vercel
 └── brain.md               # Context and memory ledger (this file)
 ```
 
 ---
 
 ## 4. Current Status & Known Decisions
-- **LLM Engine:** Groq `llama-3.1-8b-instant` with temperature `0.1` for grounded, hallucination-resistant answers. Supported via `.env` (`GROQ_API_KEY`) or direct entry in Streamlit UI sidebar.
-- **RAG & Hybrid Search:** RRF keying uses content/metadata hashes (resolved `id()` object identity bug). Page numbers are unified to 1-based indexing across ingestion, index, and retrieval filters.
-- **Pre-Built Vector Store:** `faiss_index/` is tracked in git so live cloud deployments (e.g. Streamlit Cloud) start up instantly without re-processing PDFs on cold start.
-- **FastAPI Backend & React UI:** Frontend supports dynamic API URLs (`VITE_API_URL`) with fallback to local proxy.
+- **RAG Architecture:** Fully migrated to a **pure LangChain RAG pipeline** using Groq `llama-3.1-8b-instant`. LangGraph has been completely removed to eliminate complexity and routing failures.
+- **Live Vercel Site:** Operates directly on Vercel (`https://strealit-lease-agent.vercel.app/`). The React UI uses in-memory RAG over 218 pre-chunked lease passages (`lease_chunks.json`) and streams live answers from Groq API token-by-token.
+- **Key Management:** Groq API key is configurable directly in the web UI via the "Set Groq Key" modal and saved to browser `localStorage`, or read from `VITE_GROQ_API_KEY` / `GROQ_API_KEY`.
+- **Git Sync:** All changes are maintained directly on branch `main` with zero branch fragmentation.
 
 ---
 
@@ -73,11 +74,16 @@ Stremlit_Project/
   - Fixed `apply_filters_docs` discarding page filters when `lease_no` was None.
   - Migrated `faiss_index` metadata and `ingestion.py` from 0-based to 1-based page indexing.
   - Fixed Streamlit filter bug where default number input values forced `page=1` filter on all queries.
-  - Fixed LangGraph router routing document summaries to conversation history node without retrieving lease text.
   - Upgraded Streamlit UI with `st.chat_input`, citation source drawers, and sidebar Groq API key configuration.
 - **2026-10-24 (Session 3):**
   - Pushed all fixes, configuration updates, and `brain.md` to GitHub remote `origin/main` (`https://github.com/Prabhat12112002/Strealit_Lease_Agent.git`).
 - **2026-10-24 (Session 4):**
   - Tracked pre-indexed `faiss_index/` in git for instant startup on live cloud deployments.
   - Updated React UI (`lease-assistant-ui`) to support dynamic `VITE_API_URL` configuration and verified clean production build.
-  - Committed and pushed updates to `origin/main` for live website deployment.
+- **2026-10-25 (Session 5):**
+  - Completely removed LangGraph and replaced with a pure LangChain RAG pipeline (`build_rag_chain`) using Groq `llama-3.1-8b-instant`.
+  - Exported all 218 lease chunks to `docs/lease_chunks.json` and `lease-assistant-ui/src/data/lease_chunks.json`.
+  - Implemented real-time client-side RAG and Groq streaming in `lease-assistant-ui/src/App.jsx` so the live Vercel site works without requiring a separate Python server.
+  - Added "Set Groq Key" modal in the React UI with `localStorage` persistence and direct link to get free Groq keys.
+  - Added root `package.json` for Vercel deployment orchestration.
+  - Pushed all changes directly to GitHub `main` branch.

@@ -2,9 +2,10 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   Flame, ShieldAlert, FileText, CheckCircle2, Zap, Settings, Search, 
   Moon, Sun, Send, PanelRightClose, Sparkles, Plus, Database, 
-  Filter, ArrowRight, ChevronDown, Brain, Clock, X, MessageSquare, ShieldCheck
+  Filter, ArrowRight, ChevronDown, Brain, Clock, X, MessageSquare, ShieldCheck, Key
 } from 'lucide-react';
 import './App.css';
+import LEASE_CHUNKS from './data/lease_chunks.json';
 
 // -------------------------------------------------------------
 // Pre-populated legal Oil & Gas lease Q&A (10 turns / 5 pairs)
@@ -133,12 +134,67 @@ const DEFAULT_REPLY = {
   ]
 };
 
+// Client-side RAG retrieval function
+function retrieveLeaseChunks(query, filters, k = 5) {
+  const queryTerms = query.toLowerCase().split(/\W+/).filter(t => t.length > 2);
+  let pool = LEASE_CHUNKS || [];
+
+  if (filters) {
+    const leaseNo = filters.leaseNo || filters.lease_no;
+    const page = filters.page;
+    const pageMin = filters.pageMin || filters.page_min;
+    const pageMax = filters.pageMax || filters.page_max;
+
+    if (leaseNo) {
+      const targetLease = parseInt(leaseNo);
+      pool = pool.filter(c => c.lease_no === targetLease);
+    }
+    if (page) {
+      const targetPage = parseInt(page);
+      pool = pool.filter(c => c.page === targetPage);
+    }
+    if (pageMin) {
+      const minP = parseInt(pageMin);
+      pool = pool.filter(c => c.page >= minP);
+    }
+    if (pageMax) {
+      const maxP = parseInt(pageMax);
+      pool = pool.filter(c => c.page <= maxP);
+    }
+  }
+
+  if (pool.length === 0) {
+    pool = LEASE_CHUNKS || [];
+  }
+
+  const scored = pool.map(item => {
+    let score = 0;
+    const lower = (item.text || "").toLowerCase();
+    for (const term of queryTerms) {
+      if (lower.includes(term)) {
+        score += 2.0;
+        const matches = (lower.match(new RegExp(term, "g")) || []).length;
+        score += Math.min(matches * 0.4, 2.0);
+      }
+    }
+    return { item, score };
+  });
+
+  scored.sort((a, b) => b.score - a.score);
+  return scored.slice(0, k).map(s => s.item);
+}
+
 function App() {
   const [messages, setMessages] = useState(INITIAL_MESSAGES);
   const [inputVal, setInputVal] = useState("");
   const [theme, setTheme] = useState("dark");
   const [loading, setLoading] = useState(false);
   const [selectedCitation, setSelectedCitation] = useState(null);
+  
+  // Groq API Key state
+  const [apiKey, setApiKey] = useState(() => localStorage.getItem("groq_api_key") || import.meta.env.VITE_GROQ_API_KEY || "");
+  const [showKeyModal, setShowKeyModal] = useState(false);
+  const [inputKey, setInputKey] = useState("");
   
   // Collapsible summary panels state
   const [collapsedSummaries, setCollapsedSummaries] = useState({});
@@ -194,10 +250,17 @@ function App() {
     }));
   };
 
-  // Real API Streaming handler with offline simulation fallback
+  // Real Groq Llama 3.1 8B Instant RAG Pipeline
   const handleSend = async (textToSend) => {
     const text = textToSend || inputVal.trim();
     if (!text) return;
+
+    let groqKey = apiKey || localStorage.getItem("groq_api_key") || import.meta.env.VITE_GROQ_API_KEY;
+    if (!groqKey) {
+      setInputKey("");
+      setShowKeyModal(true);
+      return;
+    }
 
     // 1. Add User Message
     const userMsg = {
@@ -210,7 +273,6 @@ function App() {
     setInputVal("");
     setLoading(true);
 
-    // Create an empty assistant message placeholder to accumulate tokens
     const assistantMsgId = Date.now() + 1;
     const assistantMsgPlaceholder = {
       id: assistantMsgId,
@@ -221,26 +283,51 @@ function App() {
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     };
 
+    setMessages(prev => [...prev, assistantMsgPlaceholder]);
+    setLoading(false);
+
     try {
-      // 2. Perform Fetch call to FastAPI API server
-      const apiBase = import.meta.env.VITE_API_URL || (typeof window !== "undefined" && window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1" ? "/api" : "http://127.0.0.1:8000");
-      const endpoint = apiBase.endsWith("/api/chat") ? apiBase : `${apiBase}/api/chat`;
-      const response = await fetch(endpoint, {
+      // 1. Retrieve lease context from 218 chunks
+      const retrieved = retrieveLeaseChunks(text, filters, 5);
+      const contextBlocks = retrieved.map(c => 
+        `### ${c.file_name} (Lease #${c.lease_no}, Page ${c.page})\n${c.text}`
+      ).join("\n\n");
+
+      const systemPrompt = `You are an expert AI Assistant specialized in Oil & Gas Lease Agreements.
+Your job is to answer questions thoroughly, factually, and accurately using the retrieved lease context.
+
+Guidelines:
+1. Base your answer strictly on the provided 'Retrieved lease context'.
+2. Always cite the document name and page number for facts and quotes (e.g., [Lease 6.pdf, Page 3]).
+3. If the user asks for a summary of a lease or a specific clause (e.g., royalty, granting, termination), provide a clear, well-structured breakdown including percentages, amounts, deadlines, and key terms.
+4. If the retrieved context does not contain the specific information needed to answer the question, clearly state what information is available and what is missing.`;
+
+      // 2. Call Groq API with llama-3.1-8b-instant
+      const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${groqKey}`
+        },
         body: JSON.stringify({
-          message: text,
-          filters: filters,
-          history: messages.map(m => ({ role: m.role, content: m.content }))
+          model: "llama-3.1-8b-instant",
+          messages: [
+            { role: "system", content: systemPrompt },
+            ...messages.slice(-4).map(m => ({ role: m.role, content: m.content })),
+            { 
+              role: "user", 
+              content: `Retrieved lease context:\n${contextBlocks}\n\nUser question:\n${text}` 
+            }
+          ],
+          temperature: 0.1,
+          stream: true
         })
       });
 
       if (!response.ok) {
-        throw new Error("HTTP error " + response.status);
+        const errJson = await response.json().catch(() => ({}));
+        throw new Error(errJson.error?.message || `Groq API Error HTTP ${response.status}`);
       }
-
-      setLoading(false);
-      setMessages(prev => [...prev, assistantMsgPlaceholder]);
 
       const reader = response.body.getReader();
       const decoder = new TextDecoder("utf-8");
@@ -256,74 +343,49 @@ function App() {
         for (const line of lines) {
           if (line.startsWith("data: ")) {
             const dataStr = line.slice(6).trim();
-            if (!dataStr) continue;
+            if (!dataStr || dataStr === "[DONE]") continue;
 
             try {
               const data = JSON.parse(dataStr);
-              if (data.token) {
-                fullContent += data.token;
-                // Stream text accumulation in real-time
+              const token = data.choices?.[0]?.delta?.content || "";
+              if (token) {
+                fullContent += token;
                 setMessages(prev => prev.map(m => 
                   m.id === assistantMsgId ? { ...m, content: fullContent } : m
                 ));
-              } else if (data.done) {
-                // Attach final citations metadata and summary takeaways
-                setMessages(prev => prev.map(m => 
-                  m.id === assistantMsgId ? { 
-                    ...m, 
-                    summary: data.metadata.summary, 
-                    citations: data.metadata.citations 
-                  } : m
-                ));
-              } else if (data.error) {
-                console.error("Model Error: ", data.error);
-                setMessages(prev => prev.map(m => 
-                  m.id === assistantMsgId ? { ...m, content: `Error: ${data.error}` } : m
-                ));
               }
             } catch (err) {
-              console.error("SSE parse error", err, line);
+              // Ignore partial JSON chunk errors in streaming
             }
           }
         }
       }
 
+      // Convert retrieved to citations format
+      const citations = retrieved.map(c => ({
+        doc: c.file_name,
+        page: c.page,
+        text: c.text,
+        score: 0.95
+      }));
+
+      // Generate a short 1-line summary takeaway
+      const summaryText = fullContent.length > 80 
+        ? fullContent.slice(0, 110).replace(/<[^>]*>?/gm, '') + "..." 
+        : fullContent;
+
+      setMessages(prev => prev.map(m => 
+        m.id === assistantMsgId ? { ...m, summary: summaryText, citations } : m
+      ));
+
     } catch (err) {
-      console.warn("Connection to Python API failed. Falling back to frontend mockup simulation.", err);
-      
-      // Offline fallback simulator (Typing speed simulation)
-      setTimeout(() => {
-        setLoading(false);
-        const cleanText = text.toLowerCase();
-        const answerData = MOCK_REPLIES[cleanText] || DEFAULT_REPLY;
-        
-        setMessages(prev => [...prev, assistantMsgPlaceholder]);
-        
-        // Simulating word-by-word streaming effect locally
-        const words = answerData.content.split(" ");
-        let currentWordIndex = 0;
-        let runningText = "";
-        
-        const localStreamInterval = setInterval(() => {
-          if (currentWordIndex < words.length) {
-            runningText += (currentWordIndex === 0 ? "" : " ") + words[currentWordIndex];
-            setMessages(prev => prev.map(m => 
-              m.id === assistantMsgId ? { ...m, content: runningText } : m
-            ));
-            currentWordIndex++;
-          } else {
-            clearInterval(localStreamInterval);
-            // End of local simulated stream
-            setMessages(prev => prev.map(m => 
-              m.id === assistantMsgId ? { 
-                ...m, 
-                summary: answerData.summary, 
-                citations: answerData.citations 
-              } : m
-            ));
-          }
-        }, 30); // Stream speed
-      }, 1000);
+      console.error("Groq RAG Query failed:", err);
+      setMessages(prev => prev.map(m => 
+        m.id === assistantMsgId ? { 
+          ...m, 
+          content: `⚠️ **Groq Error:** ${err.message}. Please click **Set Groq Key** at the top right to verify your API key.` 
+        } : m
+      ));
     }
   };
 
@@ -348,18 +410,31 @@ function App() {
           </div>
           <div>
             <h1 className="font-semibold text-sm leading-tight tracking-tight">Lease Assistant</h1>
-            <span className="text-[10px] text-slate-400 font-medium">DeepSeek-v4-Flash Lease Intelligence</span>
+            <span className="text-[10px] text-teal-400 font-medium">Groq Llama 3.1 8B Instant RAG</span>
           </div>
         </div>
 
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => { setInputKey(apiKey); setShowKeyModal(true); }}
+            className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-semibold border transition-all cursor-pointer ${
+              apiKey 
+                ? "bg-teal-950/70 border-teal-500/50 text-teal-300 hover:bg-teal-900/80 shadow-[0_0_10px_rgba(20,184,166,0.15)]" 
+                : "bg-amber-950/70 border-amber-500/60 text-amber-300 hover:bg-amber-900/80 animate-pulse"
+            }`}
+            title="Configure Groq API Key"
+          >
+            <Key className="w-3.5 h-3.5" />
+            <span>{apiKey ? "Groq: Connected" : "🔑 Set Groq Key"}</span>
+          </button>
+
           <div className="flex items-center gap-1.5 bg-slate-800 border border-slate-700/60 rounded-full px-3 py-1 text-[11px] font-semibold text-slate-300">
             <span className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_#10b981] animate-pulse"></span>
-            <span>KB: Indexed</span>
+            <span>218 Chunks</span>
           </div>
           <button 
             onClick={toggleTheme} 
-            className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-800 text-slate-450 hover:text-white transition-colors"
+            className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-800 text-slate-450 hover:text-white transition-colors cursor-pointer"
             title="Toggle theme"
           >
             {theme === "dark" ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
@@ -744,6 +819,74 @@ function App() {
           </aside>
         )}
       </div>
+
+      {/* Groq API Key Configuration Modal */}
+      {showKeyModal && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-700/80 rounded-2xl max-w-md w-full p-6 shadow-2xl animate-fade-in">
+            <div className="flex justify-between items-center mb-4">
+              <div className="flex items-center gap-2 text-white font-semibold text-base">
+                <Key className="w-5 h-5 text-teal-400" />
+                <span>Configure Groq API Key</span>
+              </div>
+              <button 
+                onClick={() => setShowKeyModal(false)} 
+                className="text-slate-400 hover:text-white transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <p className="text-xs text-slate-300 mb-4 leading-relaxed">
+              This live web app runs real-time RAG inference using <strong>Groq Llama 3.1 8B Instant</strong>.
+              Enter your Groq API key to start asking questions across all leases:
+            </p>
+
+            <input
+              type="password"
+              value={inputKey}
+              onChange={(e) => setInputKey(e.target.value)}
+              placeholder="gsk_..."
+              className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3.5 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-teal-500 transition-colors mb-2 font-mono"
+              autoFocus
+            />
+
+            <div className="flex justify-between items-center text-[11px] text-slate-400 mb-6">
+              <span>Saved locally in your browser session.</span>
+              <a 
+                href="https://console.groq.com/keys" 
+                target="_blank" 
+                rel="noreferrer" 
+                className="text-teal-400 hover:underline font-medium"
+              >
+                Get a free Groq key &rarr;
+              </a>
+            </div>
+
+            <div className="flex justify-end gap-2.5">
+              <button
+                type="button"
+                onClick={() => setShowKeyModal(false)}
+                className="px-4 py-2 text-xs font-semibold text-slate-400 hover:text-white rounded-lg transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const trimmed = inputKey.trim();
+                  setApiKey(trimmed);
+                  localStorage.setItem("groq_api_key", trimmed);
+                  setShowKeyModal(false);
+                }}
+                className="px-5 py-2 text-xs font-semibold bg-teal-600 hover:bg-teal-500 text-white rounded-lg transition-colors cursor-pointer shadow-md"
+              >
+                Save & Connect
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

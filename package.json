@@ -1,0 +1,8 @@
+{
+  "name": "strealit-lease-agent",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "build": "cd lease-assistant-ui && npm install && npm run build"
+  }
+}

@@ -5,7 +5,6 @@ from langchain_community.vectorstores import FAISS
 from langchain_groq import ChatGroq
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
-from langgraph.graph import StateGraph, END
 from langchain_core.documents import Document
 
 try:
@@ -48,14 +47,6 @@ def init_llm(api_key: Optional[str] = None, model_name: Optional[str] = None) ->
         temperature=0.1,
     )
 
-# System prompts
-SYSTEM_ROUTER = """You are the Router for the Oil & Gas Lease Assistant.
-Analyze the user's input and classify it into one of two routes:
-- 'qa': Any question or request about oil & gas leases, agreements, clauses, royalties, terms, or requests to summarize lease documents.
-- 'summarize': ONLY when the user explicitly asks to summarize or recap the chat conversation itself (e.g., 'summarize our chat', 'recap our conversation', 'what did we discuss?').
-
-Return ONLY the single word 'qa' or 'summarize'."""
-
 SYSTEM_QA = """You are an expert AI Assistant specialized in Oil & Gas Lease Agreements.
 Your job is to answer questions thoroughly, factually, and accurately using the retrieved lease context.
 
@@ -65,9 +56,6 @@ Guidelines:
 3. If the user asks for a summary of a lease or a specific clause (e.g., royalty, granting, termination), provide a clear, well-structured breakdown including percentages, amounts, deadlines, and key terms.
 4. If the retrieved context does not contain the specific information needed to answer the question, clearly state what information is available and what is missing.
 5. If a SYSTEM NOTE is present, address it appropriately."""
-
-SYSTEM_SUMMARIZER = """You are the Conversation Summarizer for the Oil & Gas Lease Assistant.
-Create a concise running summary of the chat conversation history, highlighting key topics discussed, lease terms referenced, and any open questions."""
 
 # Document helpers
 def get_all_docs_from_store(store: FAISS) -> List[Document]:
@@ -160,7 +148,7 @@ def make_retrieval_fn(store: FAISS, rerank_method: str = "bm25"):
             bge = None
 
     def get_context(query: str, filters: Optional[Dict] = None, k: int = 5) -> Tuple[str, List[Document], Optional[str]]:
-        # Stage-1: Hybrid retrieval with top 20 candidates
+        # Stage-1: Hybrid retrieval with top candidates
         candidate_count = max(20, k * 3)
         vec_top = [d for d, _ in store.similarity_search_with_score(query, k=candidate_count)]
         bm_top = []
@@ -219,86 +207,41 @@ def make_retrieval_fn(store: FAISS, rerank_method: str = "bm25"):
 
     return get_context
 
-class AgentState(dict):
-    question: str
-    answer: Optional[str]
-    route: Optional[str]
-    history: Optional[List[Dict[str, str]]]
-    summary: Optional[str]
-    filters: Optional[Dict]
-    documents: Optional[List[Document]]
-
-def build_agent(store: FAISS, llm: ChatGroq, rerank_method: str = "bm25"):
+# Pure LangChain RAG Pipeline (No LangGraph)
+def build_rag_chain(store: FAISS, llm: Optional[ChatGroq] = None, rerank_method: str = "bm25"):
+    """Build a pure LangChain RAG pipeline using Groq LLM."""
     get_context = make_retrieval_fn(store, rerank_method=rerank_method)
-
-    router_prompt = ChatPromptTemplate.from_messages([
-        ("system", SYSTEM_ROUTER),
-        ("human", "User message: {question}\nClassify into 'qa' or 'summarize' only:")
-    ])
-    router_chain = router_prompt | llm | StrOutputParser()
-
-    def route_node(state: AgentState) -> AgentState:
-        try:
-            route_raw = router_chain.invoke({"question": state["question"]}).strip().lower()
-            route = "summarize" if "summarize" in route_raw and "qa" not in route_raw else "qa"
-        except Exception:
-            route = "qa"
-        return {"route": route}
 
     qa_prompt = ChatPromptTemplate.from_messages([
         ("system", SYSTEM_QA),
         ("human",
          "SYSTEM NOTE:\n{system_note}\n\n"
-         "Running summary of prior conversation:\n{summary}\n\n"
          "Recent conversation:\n{recent_history}\n\n"
          "Retrieved lease context:\n{context}\n\n"
          "User question:\n{question}")
     ])
-    qa_chain = qa_prompt | llm | StrOutputParser()
+    chain = (qa_prompt | llm | StrOutputParser()) if llm is not None else None
 
-    def qa_node(state: AgentState) -> AgentState:
-        ctx, docs, note = get_context(state["question"], state.get("filters", None))
-        msgs = state.get("history", []) or []
+    def rag_query(
+        question: str, 
+        history: Optional[List[Dict[str, str]]] = None, 
+        filters: Optional[Dict] = None
+    ) -> Dict:
+        ctx, docs, note = get_context(question, filters)
+        if chain is None:
+            return {"answer": "LLM is not initialized. Please configure GROQ_API_KEY.", "documents": docs}
+
+        msgs = history or []
         recent = msgs[-6:]
         recent_text_lines = [f"{m.get('role', 'user')}: {m.get('content', '')}" for m in recent if m.get('content')]
         recent_text = "\n".join(recent_text_lines) if recent_text_lines else "(no prior messages)"
 
-        answer = qa_chain.invoke({
-            "question": state["question"],
+        answer = chain.invoke({
+            "question": question,
             "context": ctx or "(no matching lease context found)",
             "recent_history": recent_text,
-            "summary": state.get("summary", "") or "(none)",
             "system_note": note or "None",
         })
         return {"answer": answer, "documents": docs}
 
-    summary_prompt = ChatPromptTemplate.from_messages([
-        ("system", SYSTEM_SUMMARIZER),
-        ("human",
-         "Existing running summary:\n{summary}\n\n"
-         "Full conversation messages:\n{history}\n\n"
-         "Return only the updated conversation summary.")
-    ])
-    summary_chain = summary_prompt | llm | StrOutputParser()
-
-    def summarize_node(state: AgentState) -> AgentState:
-        msgs = state.get("history", []) or []
-        hist_text = "\n".join([f"{m.get('role', 'user')}: {m.get('content', '')}" for m in msgs if m.get('content')])
-        new_summary = summary_chain.invoke({
-            "summary": state.get("summary", "") or "(none)",
-            "history": hist_text or "(no messages to summarize)"
-        })
-        return {"answer": new_summary, "documents": []}
-
-    graph = StateGraph(AgentState)
-    graph.add_node("router", route_node)
-    graph.add_node("qa", qa_node)
-    graph.add_node("summarize", summarize_node)
-    graph.set_entry_point("router")
-    graph.add_conditional_edges("router", lambda s: s["route"], {
-        "qa": "qa",
-        "summarize": "summarize",
-    })
-    graph.add_edge("qa", END)
-    graph.add_edge("summarize", END)
-    return graph.compile()
+    return rag_query

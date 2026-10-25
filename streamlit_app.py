@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from agent.ingestion import ingest_folder, ingest_files, init_embeddings
-from agent.retrieve_ag import init_llm, build_agent, load_store, save_store
+from agent.retrieve_ag import init_llm, build_rag_chain, load_store, save_store
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 
@@ -68,21 +68,21 @@ if "store" not in st.session_state:
 if "current_rerank" not in st.session_state:
     st.session_state.current_rerank = DEFAULT_RERANK_METHOD
 
-if "agent_graph" not in st.session_state:
-    st.session_state.agent_graph = (
-        build_agent(st.session_state.store, st.session_state.llm, rerank_method=st.session_state.current_rerank)
+if "rag_pipeline" not in st.session_state:
+    st.session_state.rag_pipeline = (
+        build_rag_chain(st.session_state.store, st.session_state.llm, rerank_method=st.session_state.current_rerank)
         if (st.session_state.store and st.session_state.llm) else None
     )
 
-def ensure_agent(rerank: str):
-    """Rebuild agent only if configuration changed or agent is None."""
+def ensure_rag_pipeline(rerank: str):
+    """Rebuild RAG pipeline only if configuration changed or pipeline is None."""
     needs_rebuild = (
-        st.session_state.agent_graph is None or 
+        st.session_state.rag_pipeline is None or 
         st.session_state.current_rerank != rerank
     )
     if needs_rebuild and st.session_state.store and st.session_state.llm:
         st.session_state.current_rerank = rerank
-        st.session_state.agent_graph = build_agent(
+        st.session_state.rag_pipeline = build_rag_chain(
             st.session_state.store, 
             st.session_state.llm, 
             rerank_method=rerank
@@ -134,7 +134,7 @@ with st.sidebar:
             try:
                 st.session_state.llm = init_llm(api_key=api_key_input, model_name=model_choice)
                 if st.session_state.store:
-                    st.session_state.agent_graph = build_agent(
+                    st.session_state.rag_pipeline = build_rag_chain(
                         st.session_state.store, 
                         st.session_state.llm, 
                         rerank_method=st.session_state.current_rerank
@@ -144,7 +144,7 @@ with st.sidebar:
                 st.error(f"Error initializing Groq LLM: {e}")
         else:
             st.session_state.llm = None
-            st.session_state.agent_graph = None
+            st.session_state.rag_pipeline = None
 
     st.markdown("---")
     st.markdown("### 💬 Conversations")
@@ -221,7 +221,7 @@ with st.expander("📥 Upload & Ingest Lease PDFs", expanded=False):
                     st.session_state.store = store
                     save_store(store, INDEX_DIR)
                     if st.session_state.llm:
-                        st.session_state.agent_graph = build_agent(store, st.session_state.llm, rerank_method=rerank_default)
+                        st.session_state.rag_pipeline = build_rag_chain(store, st.session_state.llm, rerank_method=rerank_default)
                     st.success(f"Ingested newly saved PDFs ➜ Added {added} chunks!")
 
     with col_btn2:
@@ -232,7 +232,7 @@ with st.expander("📥 Upload & Ingest Lease PDFs", expanded=False):
                 if store:
                     save_store(store, INDEX_DIR)
                     if st.session_state.llm:
-                        st.session_state.agent_graph = build_agent(store, st.session_state.llm, rerank_method=rerank_default)
+                        st.session_state.rag_pipeline = build_rag_chain(store, st.session_state.llm, rerank_method=rerank_default)
                 st.success(f"Successfully synced index! Total chunks: {total}")
 
 # Chat Section
@@ -304,8 +304,8 @@ if user_query:
             filters["page_max"] = int(page_max)
         filters_to_pass = filters if filters else None
 
-        # Ensure agent graph matches rerank choice
-        ensure_agent(rerank_method)
+        # Ensure RAG pipeline matches rerank choice
+        ensure_rag_pipeline(rerank_method)
 
         # Append user message
         st.session_state.sessions[sid].append({"role": "user", "content": user_query})
@@ -314,16 +314,14 @@ if user_query:
         with st.chat_message("user"):
             st.markdown(user_query)
 
-        # Run agent
+        # Run RAG pipeline
         with st.chat_message("assistant"):
             with st.spinner("Analyzing lease documents..."):
-                state_in = {
-                    "question": user_query,
-                    "history": st.session_state.sessions[sid],
-                    "summary": st.session_state.session_summaries.get(sid, ""),
-                    "filters": filters_to_pass,
-                }
-                result = st.session_state.agent_graph.invoke(state_in)
+                result = st.session_state.rag_pipeline(
+                    question=user_query,
+                    history=st.session_state.sessions[sid],
+                    filters=filters_to_pass
+                )
                 answer = result.get("answer", "No response generated.")
                 docs = result.get("documents", [])
 
